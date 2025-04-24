@@ -951,4 +951,3 @@ def find_ground_state(
 
     # --- 8. Return Comprehensive Results Dictionary ---
     return result_dict
-
