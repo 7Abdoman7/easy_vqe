@@ -1,0 +1,33 @@
+Metadata-Version: 2.4
+Name: easy_vqe
+Version: 0.1.0
+Summary: A user-friendly wrapper for setting up and running VQE calculations with Qiskit.
+Author-email: Abdelrahman Elsayed Ahmed <abdo.elsayd102@gmail.com>
+License: Apache-2.0
+Project-URL: Homepage, https://github.com/7abdoman7/easy_vqe
+Project-URL: Bug Tracker, https://github.com/7abdoman7/easy_vqe/issues
+Classifier: Development Status :: 3 - Alpha
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Operating System :: OS Independent
+Classifier: Intended Audience :: Science/Research
+Classifier: Topic :: Scientific/Engineering :: Physics
+Classifier: Typing :: Typed
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: qiskit>=0.45
+Requires-Dist: qiskit-aer>=0.12
+Requires-Dist: numpy>=1.20
+Requires-Dist: scipy>=1.7
+Requires-Dist: matplotlib>=3.4
+Provides-Extra: test
+Requires-Dist: pytest>=7.0; extra == "test"
+Provides-Extra: dev
+Requires-Dist: easy_vqe[test]; extra == "dev"
+Requires-Dist: ipython; extra == "dev"
+Dynamic: license-file

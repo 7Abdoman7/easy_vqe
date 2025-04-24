@@ -1,0 +1,12 @@
+qiskit>=0.45
+qiskit-aer>=0.12
+numpy>=1.20
+scipy>=1.7
+matplotlib>=3.4
+
+[dev]
+easy_vqe[test]
+ipython
+
+[test]
+pytest>=7.0
