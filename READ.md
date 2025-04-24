@@ -25,7 +25,7 @@ pip install easy-vqe
 Or, for development, clone this repository and install in editable mode:
 
 ```bash
-git clone https://github.com/7abdoman7/easy_vqe.git 
+git clone https://github.com/7Abdoman7/easy_vqe.git 
 cd easy_vqe_project
 pip install -e .[dev] 
 ```
