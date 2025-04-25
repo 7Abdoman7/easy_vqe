@@ -1,6 +1,6 @@
 import numpy as np
 from easy_vqe import find_ground_state 
-from easy_vqe.vqe_core import draw_final_bound_circuit, print_results_summary
+from easy_vqe.vqe_core import draw_final_bound_circuit, print_results_summary, get_theoretical_ground_state_energy
 
 # --- Define Hamiltonian ---
 # Example: Simpler 4-Qubit Hamiltonian (adjust as needed)
@@ -48,10 +48,10 @@ print("Starting VQE calculation...")
 results = find_ground_state(
     ansatz_structure=ansatz_structure,
     hamiltonian_expression=hamiltonian_4q,
-    n_shots=2048,
+    n_shots=8192,
     optimizer_method='COBYLA',
-    optimizer_options={'maxiter': 300, 'rhobeg': 0.5, 'tol': 1e-5},
-    initial_params_strategy='zeros',
+    optimizer_options={'maxiter': 500, 'rhobeg': 0.5, 'tol': 1e-5},
+    initial_params_strategy='random',
     display_progress=True,
     plot_filename="h4_convergence.png",
 )
@@ -62,3 +62,15 @@ print_results_summary(results)
 # --- Draw Final Bound Circuit ---
 draw_final_bound_circuit(results)
 
+# --- Theoretical Ground State Energy ---
+theoretical_energy = get_theoretical_ground_state_energy(hamiltonian_4q)
+print(f"Theoretical Ground State Energy: {theoretical_energy}")
+
+# --- Compare with VQE Result ---
+vqe_energy = results['final_energy']
+print(f"VQE Ground State Energy: {vqe_energy}")
+
+if np.isclose(vqe_energy, theoretical_energy, atol=1e-2):
+    print("VQE result is close to the theoretical ground state energy.")
+else:
+    print("VQE result is NOT close to the theoretical ground state energy.")

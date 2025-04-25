@@ -877,6 +877,42 @@ def find_ground_state(
 
     return result_dict
 
+def get_theoretical_ground_state_energy(hamiltonian_expression: str) -> float:
+    """
+    Calculates the theoretical ground state energy of a Hamiltonian.
+
+    Args:
+        hamiltonian_expression: Hamiltonian string (e.g., "-1.0*ZZ + 0.5*X").
+
+    Returns:
+        float: The theoretical ground state energy.
+
+    Raises:
+        ValueError: If the Hamiltonian expression is invalid
+    """
+    pauli_i = np.array([[1, 0], [0, 1]], dtype=complex)
+    pauli_x = np.array([[0, 1], [1, 0]], dtype=complex)
+    pauli_y = np.array([[0, -1j], [1j, 0]], dtype=complex)
+    pauli_z = np.array([[1, 0], [0, -1]], dtype=complex)
+    pauli_map = {'I': pauli_i, 'X': pauli_x, 'Y': pauli_y, 'Z': pauli_z}
+
+    parsed_ham = parse_hamiltonian_expression(hamiltonian_expression) 
+
+    num_qubits = len(parsed_ham[0][1])
+    dim = 2**num_qubits
+    ham_matrix = np.zeros((dim, dim), dtype=complex)
+
+    for coeff, pauli_str in parsed_ham:
+        term_matrix = np.array([1], dtype=complex) 
+        for pauli_char in pauli_str:
+            term_matrix = np.kron(term_matrix, pauli_map[pauli_char])
+        ham_matrix += coeff * term_matrix
+
+    eigenvalues = np.linalg.eigvalsh(ham_matrix)
+    ground_state_energy_exact = np.min(eigenvalues)
+
+    return ground_state_energy_exact.real
+
 
 def print_results_summary(results: Dict[str, Any]) -> None:
     """
