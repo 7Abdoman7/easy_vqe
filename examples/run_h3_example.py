@@ -1,6 +1,5 @@
 import numpy as np
-from easy_vqe import find_ground_state
-from easy_vqe.vqe_core import draw_final_bound_circuit, print_results_summary, get_theoretical_ground_state_energy
+from easy_vqe import find_ground_state, draw_final_bound_circuit, print_results_summary, get_theoretical_ground_state_energy
 
 # --- Define Hamiltonian ---
 # Example: Simpler 3-Qubit Hamiltonian (adjust as needed)

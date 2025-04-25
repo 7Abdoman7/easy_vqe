@@ -1,7 +1,6 @@
 LICENSE
 pyproject.toml
 easy_vqe/__init__.py
-easy_vqe/vqe_core.py
 easy_vqe.egg-info/PKG-INFO
 easy_vqe.egg-info/SOURCES.txt
 easy_vqe.egg-info/dependency_links.txt

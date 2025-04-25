@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: easy_vqe
-Version: 0.1.0
+Version: 0.2.0
 Summary: A user-friendly wrapper for setting up and running VQE calculations with Qiskit.
 Author-email: Abdelrahman Elsayed Ahmed <abdo.elsayd102@gmail.com>
 License: Apache-2.0
