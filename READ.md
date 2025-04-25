@@ -7,12 +7,16 @@ A user-friendly Python package for setting up and running Variational Quantum Ei
 
 ## Features
 
-*   **Simple Hamiltonian Definition:** Define Hamiltonians using intuitive strings (e.g., `"1.0 * XX - 0.5 * ZI + YZ"`).
-*   **Flexible Ansatz Creation:** Build parameterized circuits using a list-based structure with standard Qiskit gate names.
-*   **Automated VQE Workflow:** Handles parameter management, basis rotations, expectation value calculation, and optimization.
-*   **Built-in Optimization:** Uses `scipy.optimize.minimize` with configurable methods (COBYLA, Nelder-Mead, etc.).
+*   **Simple Hamiltonian Definition:** Define Hamiltonians using intuitive strings (e.g., `"1.0 * XX - 0.5 * ZI + YZ"`). Handles various formats, signs, and spacing.
+*   **Flexible Ansatz Creation:** Build parameterized circuits using a list-based structure with standard Qiskit gate names. Auto-generates parameters.
+*   **Automated VQE Workflow:** Handles parameter management, basis rotations, measurement simulation, expectation value calculation, and optimization loop.
+*   **Built-in Optimization:** Uses `scipy.optimize.minimize` with configurable methods (COBYLA, Nelder-Mead, etc.) and options.
 *   **Simulation Backend:** Leverages `qiskit-aer` for efficient classical simulation.
 *   **Convergence Plotting:** Optionally save plots of the energy convergence during optimization.
+*   **Flexible Initial Parameters:** Supports random initialization, zero initialization, or providing specific lists/NumPy arrays for starting parameters.
+*   **Result Summarization:** Includes helper functions to print a clean summary of the VQE results.
+*   **Theoretical Energy Calculation:** Provides a utility to compute the exact ground state energy via matrix diagonalization for comparison.
+*   **Circuit Visualization:** Includes a helper function to draw the final ansatz circuit with the optimized parameters bound.
 
 ## Installation
 
