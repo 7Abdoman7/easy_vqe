@@ -731,54 +731,66 @@ def find_ground_state(
     def objective_function(current_params: np.ndarray) -> float:
         """Closure for the optimizer, calculates Hamiltonian expectation value."""
         try:
-            # Calculate expectation value using the helper function
             exp_val = get_hamiltonian_expectation_value(
                 ansatz=ansatz,
                 parsed_hamiltonian=parsed_hamiltonian,
-                param_values=current_params, 
+                param_values=current_params,
                 n_shots=n_shots
             )
-            # Log data and potentially print progress using the logger's callback
             logger.callback(current_params, exp_val, display_progress=display_progress)
             return exp_val
         except (ValueError, RuntimeError, TypeError) as e:
-             # Handle potential errors during simulation gracefully within optimization
              print(f"\n[Warning] Error during expectation value calculation (params={np.round(current_params[:4], 3)}...): {e}")
-             # Returning infinity tells the optimizer this point is invalid/undesirable
              return np.inf
         except Exception as e:
              print(f"\n[Critical Warning] Unexpected error in objective function: {e}")
              return np.inf
 
     initial_params: np.ndarray
-    if isinstance(initial_params_strategy, np.ndarray):
-        if initial_params_strategy.shape == (num_params,):
-            initial_params = initial_params_strategy.astype(float) 
-            print("Using provided numpy array for initial parameters.")
-        else:
-            print(f"[Warning] Provided initial_params shape {initial_params_strategy.shape} != expected ({num_params},). Using 'random'.")
-            initial_params_strategy = 'random' 
-            initial_params = np.random.uniform(0, 2 * np.pi, num_params)
+    strategy_check_value = initial_params_strategy
 
-    elif isinstance(initial_params_strategy, (list, tuple, Sequence)):
-         if len(initial_params_strategy) == num_params:
-             initial_params = np.array(initial_params_strategy, dtype=float)
-             print("Using provided list/sequence for initial parameters.")
-         else:
-            print(f"[Warning] Provided initial_params length {len(initial_params_strategy)} != expected {num_params}. Using 'random'.")
-            initial_params_strategy = 'random'
+    print("\nProcessing Initial Parameters Strategy...") 
+
+    if isinstance(strategy_check_value, np.ndarray):
+        if strategy_check_value.shape == (num_params,):
+            initial_params = strategy_check_value.astype(float)
+            print(f"Strategy: Using provided numpy array (shape {initial_params.shape}) for initial parameters.")
+        else:
+            print(f"[Warning] Provided initial_params numpy array shape {strategy_check_value.shape} != expected ({num_params},). Defaulting to 'random'.")
             initial_params = np.random.uniform(0, 2 * np.pi, num_params)
-    elif initial_params_strategy == 'zeros':
+            print(f"Strategy: Using 'random' (generated {num_params} parameters).")
+            strategy_check_value = 'random' 
+
+    elif isinstance(strategy_check_value, (list, tuple)):
+         if len(strategy_check_value) == num_params:
+             try:
+                 initial_params = np.array(strategy_check_value, dtype=float)
+                 print(f"Strategy: Using provided list/tuple (length {len(strategy_check_value)}) for initial parameters.")
+             except ValueError as ve:
+                 print(f"[Warning] Could not convert provided list/tuple to numeric array: {ve}. Defaulting to 'random'.")
+                 initial_params = np.random.uniform(0, 2 * np.pi, num_params)
+                 print(f"Strategy: Using 'random' (generated {num_params} parameters).")
+                 strategy_check_value = 'random'
+         else:
+            print(f"[Warning] Provided initial_params list/tuple length {len(strategy_check_value)} != expected {num_params}. Defaulting to 'random'.")
+            initial_params = np.random.uniform(0, 2 * np.pi, num_params)
+            print(f"Strategy: Using 'random' (generated {num_params} parameters).")
+            strategy_check_value = 'random'
+
+    elif strategy_check_value == 'zeros':
          initial_params = np.zeros(num_params)
-         print("Using 'zeros' strategy for initial parameters.")
-    elif initial_params_strategy == 'random':
+         print(f"Strategy: Using 'zeros' (generated {num_params} parameters).")
+    elif strategy_check_value == 'random':
          initial_params = np.random.uniform(0, 2 * np.pi, num_params)
-         print("Using 'random' strategy for initial parameters.")
-    else: 
-         print(f"[Warning] Unknown initial_params_strategy '{initial_params_strategy}'. Using 'random'.")
+         print(f"Strategy: Using 'random' (generated {num_params} parameters).")
+    else:
+         print(f"[Warning] Unknown initial_params_strategy '{strategy_check_value}'. Defaulting to 'random'.")
          initial_params = np.random.uniform(0, 2 * np.pi, num_params)
+         print(f"Strategy: Using 'random' (generated {num_params} parameters).")
+         strategy_check_value = 'random'
 
     result_dict['initial_params'] = np.copy(initial_params)
+    result_dict['initial_params_strategy_used'] = strategy_check_value 
 
     opt_options = optimizer_options if optimizer_options is not None else {}
     if 'maxiter' not in opt_options and 'maxfev' not in opt_options and max_evaluations is not None:
@@ -864,3 +876,68 @@ def find_ground_state(
             result_dict['plot_filename'] = None
 
     return result_dict
+
+
+def print_results_summary(results: Dict[str, Any]) -> None:
+    """
+    Prints a summary of the optimization results.
+
+    Args:
+        result_dict: Dictionary containing VQE results, including 'optimal_value'.
+
+    Returns:
+        None
+    """
+    print("\n" + "="*40)
+    print("          VQE Final Results Summary")
+    print("="*40)
+
+    if 'error' in results:
+        print(f"VQE Run Failed: {results['error']}")
+        if 'details' in results: print(f"Details: {results['details']}")
+    else:
+        print(f"Hamiltonian: {results['hamiltonian_expression']}")
+        print(f"Determined Number of Qubits: {results['num_qubits']}")
+        print(f"Optimizer Method: {results['optimizer_method']}")
+        print(f"Shots per evaluation: {results['n_shots']}")
+        print(f"Optimizer Success: {results['success']}")
+        print(f"Optimizer Message: {results['message']}")
+        print(f"Final Function Evaluations: {results['optimization_result'].nfev}")
+        print(f"Minimum Energy Found: {results['optimal_value']:.10f}")
+
+        optimal_params = results['optimal_params']
+        if len(optimal_params) < 15:
+            print(f"Optimal Parameters Found:\n{np.round(optimal_params, 5)}")
+        else:
+            print(f"Optimal Parameters Found: (Array length {len(optimal_params)})")
+            print(f"  First 5: {np.round(optimal_params[:5], 5)}")
+            print(f"  Last 5:  {np.round(optimal_params[-5:], 5)}")
+
+        if results.get('plot_filename'):
+            print(f"Convergence plot saved to: {results['plot_filename']}")
+        print("="*40)
+
+
+def draw_final_bound_circuit(result_dict: Dict[str, Any]) -> None:
+    """
+    Displays the final bound circuit based on the optimization result.
+
+    Args:
+        result_dict: Dictionary containing VQE results, including 'ansatz' and 'optimal_params'.
+
+    Returns:
+        None
+    """
+    ansatz = result_dict.get('ansatz')
+    optimal_params = result_dict.get('optimal_params')
+
+    if ansatz is None or optimal_params is None:
+        print("[Warning] No ansatz or optimal parameters found in result dictionary.")
+        return
+
+    final_circuit = ansatz.copy(name="Final_Bound_Circuit")
+    final_circuit = final_circuit.assign_parameters(optimal_params)
+
+    print("\nFinal Bound Circuit:")
+    print(final_circuit.draw(output='text', fold=-1))
+    print("-" * 50)

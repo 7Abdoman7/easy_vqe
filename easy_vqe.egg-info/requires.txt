@@ -3,6 +3,7 @@ qiskit-aer>=0.12
 numpy>=1.20
 scipy>=1.7
 matplotlib>=3.4
+pylatexenc>=2.10
 
 [dev]
 easy_vqe[test]
