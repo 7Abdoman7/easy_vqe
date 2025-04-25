@@ -6,7 +6,6 @@
 # the VQE optimization loop using Qiskit and SciPy.
 # =============================================================================
 
-# --- Imports ---
 import numpy as np
 from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister
 from qiskit.circuit import Parameter
@@ -18,7 +17,6 @@ import warnings
 from scipy.optimize import minimize
 from typing import Set, List, Tuple, Union, Dict, Optional, Any, Sequence
 
-# --- Gate Definitions (Constants) ---
 PARAMETRIC_SINGLE_QUBIT_TARGET: Set[str] = {'rx', 'ry', 'rz', 'p'}
 PARAMETRIC_MULTI_QUBIT: Set[str] = {'crx', 'cry', 'crz', 'cp', 'rxx', 'ryy', 'rzz', 'rzx', 'cu1', 'cu3', 'u2', 'u3'}
 NON_PARAM_SINGLE: Set[str] = {'h', 's', 't', 'x', 'y', 'z', 'sdg', 'tdg', 'id'}
@@ -26,7 +24,6 @@ NON_PARAM_MULTI: Set[str] = {'cx', 'cy', 'cz', 'swap', 'ccx', 'cswap', 'ch'}
 MULTI_PARAM_GATES: Set[str] = {'u', 'cu', 'r'} # Gates requiring specific parameter handling
 
 
-# --- Global Simulator ---
 _simulator_instance: Optional[AerSimulator] = None
 
 def get_simulator() -> AerSimulator:
@@ -38,13 +35,8 @@ def get_simulator() -> AerSimulator:
     """
     global _simulator_instance
     if _simulator_instance is None:
-        # Consider adding options for simulator method, precision etc. if needed later
         _simulator_instance = AerSimulator()
-        # For statevector simulation (if expectation from statevector is desired later):
-        # _simulator_instance = AerSimulator(method='statevector')
     return _simulator_instance
-
-# --- Core VQE Functions ---
 
 def create_custom_ansatz(num_qubits: int, ansatz_structure: List[Union[Tuple[str, List[int]], List]]) -> Tuple[QuantumCircuit, List[Parameter]]:
     """
@@ -77,9 +69,8 @@ def create_custom_ansatz(num_qubits: int, ansatz_structure: List[Union[Tuple[str
 
     ansatz = QuantumCircuit(num_qubits, name="CustomAnsatz")
     parameters_dict: Dict[str, Parameter] = {}
-    param_idx_ref: List[int] = [0] # Mutable counter for unique parameter names
+    param_idx_ref: List[int] = [0] 
 
-    # --- Helper function to process a single instruction ---
     def _process_instruction(instruction: Tuple[str, List[int]],
                              current_ansatz: QuantumCircuit,
                              params_dict: Dict[str, Parameter],
@@ -89,19 +80,17 @@ def create_custom_ansatz(num_qubits: int, ansatz_structure: List[Union[Tuple[str
             raise TypeError(f"Instruction must be a tuple of (gate_name, qubit_list). Got: {instruction}")
 
         gate_name, qubit_indices = instruction
-        gate_name = gate_name.lower() # Standardize name
+        gate_name = gate_name.lower() 
 
         if not isinstance(gate_name, str) or not isinstance(qubit_indices, list):
              raise TypeError(f"Instruction tuple must contain (str, list). Got: ({type(gate_name)}, {type(qubit_indices)})")
 
-        # Allow barrier with empty list (applies to all qubits) or specific list
         if gate_name == 'barrier' and not qubit_indices:
              qubit_indices = list(range(current_ansatz.num_qubits))
         elif not qubit_indices and gate_name != 'barrier':
             warnings.warn(f"Gate '{gate_name}' specified with empty qubit list. Skipping.", UserWarning)
             return
 
-        # --- Validate Qubit Indices ---
         for q in qubit_indices:
              if not isinstance(q, int) or q < 0:
                   raise ValueError(f"Invalid qubit index '{q}' in {qubit_indices} for gate '{gate_name}'. Indices must be non-negative integers.")
@@ -109,23 +98,19 @@ def create_custom_ansatz(num_qubits: int, ansatz_structure: List[Union[Tuple[str
                   raise ValueError(f"Qubit index {q} in {qubit_indices} for gate '{gate_name}' is out of bounds. "
                                f"Circuit has {current_ansatz.num_qubits} qubits (indices 0 to {current_ansatz.num_qubits - 1}).")
 
-        # --- Get Gate Method ---
-        original_gate_name = gate_name # Keep for error messages if alias used
+        original_gate_name = gate_name 
         if not hasattr(current_ansatz, gate_name):
-            # Allow common aliases explicitly
             if gate_name == 'cnot': gate_name = 'cx'
             elif gate_name == 'toffoli': gate_name = 'ccx'
-            elif gate_name == 'meas': gate_name = 'measure' # Allow 'meas' alias
+            elif gate_name == 'meas': gate_name = 'measure' 
             else:
                  raise ValueError(f"Gate '{original_gate_name}' is not a valid method of QuantumCircuit (or a known alias like 'cnot', 'toffoli', 'meas').")
         gate_method = getattr(current_ansatz, gate_name)
 
-        # --- Apply Gate based on Type ---
         try:
-            # Parametric Single Qubit: Apply individually with unique parameters
             if gate_name in PARAMETRIC_SINGLE_QUBIT_TARGET:
                 for q_idx in qubit_indices:
-                    param_name = f"p_{p_idx_ref[0]}" # Simple name p_0, p_1, ...
+                    param_name = f"p_{p_idx_ref[0]}" 
                     p_idx_ref[0] += 1
                     if param_name not in params_dict:
                          params_dict[param_name] = Parameter(param_name)
@@ -155,25 +140,19 @@ def create_custom_ansatz(num_qubits: int, ansatz_structure: List[Union[Tuple[str
             elif gate_name == 'barrier':
                  gate_method(qubit_indices) # Apply barrier to specified qubits
 
-            # Handle Measure (special case, needs classical bits - not typically part of ansatz)
             elif gate_name == 'measure':
                  warnings.warn("Explicit 'measure' instruction found in ansatz structure. "
                                "Measurements are typically added separately based on Hamiltonian terms.", UserWarning)
-                 # Basic handling: Assume measure all specified qubits to corresponding classical bits
-                 # Requires a ClassicalRegister to be present, which isn't added by default here.
-                 # This part might need refinement or disallowing 'measure' in the structure.
+                 
                  if not current_ansatz.cregs:
                       cr = ClassicalRegister(len(qubit_indices))
                       current_ansatz.add_register(cr)
                       warnings.warn(f"Auto-added ClassicalRegister({len(qubit_indices)}) for measure.", UserWarning)
-                 # This assumes a single classical register exists and is large enough
                  try:
                       current_ansatz.measure(qubit_indices, list(range(len(qubit_indices))))
                  except Exception as me:
                       raise RuntimeError(f"Failed to apply 'measure'. Ensure ClassicalRegister exists or handle measurement outside ansatz structure. Error: {me}")
 
-
-            # Unclassified Gates (Attempt application, warn if looks parametric)
             else:
                  # Check if it's likely parametric based on name conventions
                  is_likely_parametric = any(gate_name.endswith(p) for p in PARAMETRIC_SINGLE_QUBIT_TARGET) or \
@@ -196,7 +175,6 @@ def create_custom_ansatz(num_qubits: int, ansatz_structure: List[Union[Tuple[str
                        gate_method(*qubit_indices)
 
         except TypeError as e:
-             # Try to provide a more helpful error message about expected arguments
              num_expected_qubits = 'unknown'
              if gate_name in PARAMETRIC_SINGLE_QUBIT_TARGET or gate_name in NON_PARAM_SINGLE: num_expected_qubits = 1
              elif gate_name in {'cx','cz','cy','cp','crx','cry','crz','swap','rxx','ryy','rzz','rzx', 'cu1', 'u2'}: num_expected_qubits = 2
@@ -210,46 +188,34 @@ def create_custom_ansatz(num_qubits: int, ansatz_structure: List[Union[Tuple[str
                  f"(Check Qiskit docs for '{gate_method.__name__}' signature)."
              )
         except Exception as e:
-             # Catch other potential Qiskit errors during gate application
              raise RuntimeError(f"Unexpected error applying gate '{original_gate_name}' to qubits {qubit_indices}: {e}")
-    # --- End of helper function ---
 
-    # --- Main loop to process the ansatz structure ---
-    structure_queue = list(ansatz_structure) # Use list as a queue
+    structure_queue = list(ansatz_structure) 
     while structure_queue:
-        element = structure_queue.pop(0) # Get the next element (FIFO)
+        element = structure_queue.pop(0) 
         if isinstance(element, tuple):
              _process_instruction(element, ansatz, parameters_dict, param_idx_ref)
         elif isinstance(element, list):
              # Prepend block contents to the front of the queue for sequential processing
-             # e.g., if queue is [A, B] and element is [C, D], queue becomes [C, D, A, B]
              structure_queue[0:0] = element
         else:
              raise TypeError(f"Elements in ansatz_structure must be tuple (gate, qubits) or list (block). "
                              f"Found type '{type(element)}': {element}")
-    # --- End of main loop ---
 
-    # --- Final parameter sorting and validation ---
-    # Sort parameters numerically by name (e.g., p_0, p_1, p_10, ...)
     try:
         sorted_parameters = sorted(parameters_dict.values(), key=lambda p: int(p.name.split('_')[1]))
     except (IndexError, ValueError):
         warnings.warn("Could not sort parameters numerically by name. Using default sorting.", UserWarning)
         sorted_parameters = sorted(parameters_dict.values(), key=lambda p: p.name)
 
-
-    # Final check: Ensure all circuit parameters were captured and sorted correctly
-    # This check helps catch potential issues if Qiskit internals change or complex gates add params unexpectedly
     if set(ansatz.parameters) != set(sorted_parameters):
         warnings.warn(f"Parameter mismatch detected. Circuit params: {len(ansatz.parameters)}, Collected: {len(sorted_parameters)}. "
                       "Using sorted list derived from circuit.parameters.", UserWarning)
-        # Re-sort based on the actual circuit parameters' names to maintain consistency
         try:
             circuit_params_sorted = sorted(list(ansatz.parameters), key=lambda p: int(p.name.split('_')[1]))
         except (IndexError, ValueError):
             circuit_params_sorted = sorted(list(ansatz.parameters), key=lambda p: p.name)
 
-        # Further check if the sets don't even contain the same elements
         if not set(sorted_parameters).issubset(set(ansatz.parameters)):
              warnings.warn("Collected parameters are NOT a subset of circuit parameters. There might be an issue in parameter tracking.", UserWarning)
 
@@ -282,10 +248,9 @@ def parse_hamiltonian_expression(hamiltonian_string: str) -> List[Tuple[float, s
     hamiltonian_string = hamiltonian_string.strip()
     if not hamiltonian_string:
          raise ValueError("Hamiltonian expression cannot be empty.")
-
-    # Improved regex from previous iterations:
+    
     # Handles explicit coeffs like "+ -1.5 * XY" or "1.5*XY"
-    # Handles implicit coeffs like "- YZ" or "+ XX" or "II" (at start)
+    # Handles implicit coeffs like "- YZ" or "+ XX" or "II" 
     combined_pattern = re.compile(
         # Option 1: Explicit Coefficient Term (handles +/- coeff * Pauli)
         r"([+\-]?\s*(?:(?:\d+\.?\d*|\.?\d+)(?:[eE][+\-]?\d+)?)\s*\*\s*([IXYZ]+))" # Added scientific notation support
@@ -302,17 +267,14 @@ def parse_hamiltonian_expression(hamiltonian_string: str) -> List[Tuple[float, s
     ham_len = len(hamiltonian_string)
 
     while current_pos < ham_len:
-        # Find the start of the next potential term (skip whitespace)
         match_start_search = re.search(r'\S', hamiltonian_string[current_pos:])
         if not match_start_search:
-            break # No more non-whitespace characters
+            break 
         search_pos = current_pos + match_start_search.start()
 
-        # Attempt to match any term type starting from search_pos
         match = combined_pattern.match(hamiltonian_string, search_pos)
 
         if not match:
-            # More specific error message if possible
             remaining_str = hamiltonian_string[search_pos:]
             if remaining_str.startswith('*'):
                  raise ValueError(f"Syntax error near position {search_pos}: Unexpected '*' without preceding coefficient.")
@@ -320,9 +282,8 @@ def parse_hamiltonian_expression(hamiltonian_string: str) -> List[Tuple[float, s
 
         coefficient: float = 1.0
         pauli_str: Optional[str] = None
-        term_str = match.group(0).strip() # For context in errors
+        term_str = match.group(0).strip() 
 
-        # Determine which group matched and extract info
         if match.group(1): # Option 1 (+/- coeff * Pauli)
             # Extract coeff carefully, handling potential combined sign like "+-1.5"
             num_part = re.match(r"([+\-]?)\s*(.*)", match.group(1).split('*')[0].strip())
@@ -342,17 +303,15 @@ def parse_hamiltonian_expression(hamiltonian_string: str) -> List[Tuple[float, s
             coefficient = -1.0 if sign == '-' else 1.0
             pauli_str = match.group(7)
         elif match.group(8): # Option 2b (Pauli at start, positive implicit sign)
-             if search_pos != 0: # This pattern should only match at the very beginning
+             if search_pos != 0: 
                    raise ValueError(f"Ambiguous term '{match.group(8)}' at pos {search_pos}. Terms after the first need explicit '+', '-', or 'coeff *'.")
              coefficient = 1.0
              pauli_str = match.group(8)
         else:
-             # This case should ideally not be reached if the regex covers all valid starts
              raise RuntimeError(f"Internal parsing error: Regex match failed unexpectedly near '{hamiltonian_string[search_pos:search_pos+10]}...'")
 
 
-        # --- Validations for the extracted Pauli string and coefficient ---
-        if pauli_str is None: # Should be caught by regex groups, but double-check
+        if pauli_str is None: # This should not happen due to regex structure
              raise ValueError(f"Failed to extract Pauli string from parsed term '{term_str}'.")
         if not pauli_str: # Pauli string cannot be empty
              raise ValueError(f"Empty Pauli string found in term '{term_str}'.")
@@ -361,12 +320,9 @@ def parse_hamiltonian_expression(hamiltonian_string: str) -> List[Tuple[float, s
         if np.isnan(coefficient) or np.isinf(coefficient): # Check for NaN/Infinity coefficients
               raise ValueError(f"Invalid coefficient value ({coefficient}) found for term '{pauli_str}'.")
 
-        # Add the parsed term
         parsed_terms.append((coefficient, pauli_str))
-        # Move position past the term that was just matched
         current_pos = match.end()
 
-    # --- Final Validations After Parsing All Terms ---
     if not parsed_terms:
         # This should only happen if the input string was non-empty but contained no parsable terms
         raise ValueError(f"Could not parse any valid Hamiltonian terms from the input string: '{hamiltonian_string}'.")
@@ -452,7 +408,6 @@ def run_circuit_and_get_counts(quantum_circuit: QuantumCircuit,
          warnings.warn("Circuit contains no classical bits for measurement. Returning empty counts.", UserWarning)
          return {}
 
-    # --- Parameter Binding ---
     bound_circuit: QuantumCircuit
     num_circuit_params = quantum_circuit.num_parameters
 
@@ -473,16 +428,15 @@ def run_circuit_and_get_counts(quantum_circuit: QuantumCircuit,
                  if extra: err_msg += f"Extra: {[p.name for p in extra]}."
                  raise ValueError(err_msg)
             param_map = param_values
-        elif isinstance(param_values, (list, np.ndarray, Sequence)): # Allow general sequences
+        elif isinstance(param_values, (list, np.ndarray, Sequence)): 
             if len(param_values) != num_circuit_params:
                  raise ValueError(f"Circuit expects {num_circuit_params} parameters, but received {len(param_values)}.")
-            # Sort circuit parameters numerically by name for consistent assignment from list/array
             try:
                 sorted_params = sorted(quantum_circuit.parameters, key=lambda p: int(p.name.split('_')[1]))
             except (IndexError, ValueError):
                 warnings.warn("Could not sort parameters numerically for binding. Using default name sort.", UserWarning)
                 sorted_params = sorted(quantum_circuit.parameters, key=lambda p: p.name)
-            param_map = {p: float(v) for p, v in zip(sorted_params, param_values)} # Ensure floats
+            param_map = {p: float(v) for p, v in zip(sorted_params, param_values)} 
         else:
              raise TypeError(f"Unsupported type for 'param_values': {type(param_values)}. Use Sequence (list/array), dict, or None.")
 
@@ -502,11 +456,7 @@ def run_circuit_and_get_counts(quantum_circuit: QuantumCircuit,
                   warnings.warn(f"Circuit has no parameters, but received parameters ({type(param_values)}). Ignoring them.", UserWarning)
         bound_circuit = quantum_circuit
 
-    # --- Transpile and Run ---
-    # Note: Transpilation might be needed for optimization or specific simulator requirements.
-    # Consider adding basis_gates and optimization_level if targeting specific hardware/noise models.
     try:
-        # Ensure the circuit actually contains measurements before running
         has_measurements = any(instruction.operation.name == 'measure' for instruction in bound_circuit.data)
         if not has_measurements:
              warnings.warn("Circuit submitted for execution contains no measure instructions. Returning empty counts.", RuntimeWarning)
@@ -515,7 +465,6 @@ def run_circuit_and_get_counts(quantum_circuit: QuantumCircuit,
         compiled_circuit = transpile(bound_circuit, sim)
         result = sim.run(compiled_circuit, shots=shots).result()
         counts = result.get_counts(compiled_circuit)
-        # Qiskit counts are {'01': 100, '10': 900}. Keys are strings, values are ints.
     except Exception as e:
         # Catch potential Aer errors, transpilation issues, or other Qiskit errors
         raise RuntimeError(f"Error during circuit transpilation or execution: {e}")
@@ -548,8 +497,6 @@ def calculate_term_expectation(counts: Dict[str, int]) -> float:
          return 0.0
 
     for bitstring, count in counts.items():
-        # Parity: (-1)^(# of 1s). Qiskit bitstrings are typically little-endian,
-        # but parity calculation is independent of endianness.
         parity = bitstring.count('1') % 2
         expectation_value_sum += ((-1)**parity) * count
 
@@ -590,8 +537,6 @@ def get_hamiltonian_expectation_value(
     num_qubits = ansatz.num_qubits
     total_expected_value = 0.0
 
-    # --- Pre-bind parameters to the ansatz ONCE if it has parameters ---
-    # This is more efficient than binding inside the loop if the ansatz is complex.
     bound_ansatz: QuantumCircuit
     if ansatz.num_parameters > 0:
         # Use the same binding logic as run_circuit_and_get_counts for consistency
@@ -612,7 +557,6 @@ def get_hamiltonian_expectation_value(
     else: # No parameters
         bound_ansatz = ansatz
 
-    # --- Iterate through Hamiltonian terms ---
     for coefficient, pauli_string in parsed_hamiltonian:
         if np.isclose(coefficient, 0.0):
             continue # Skip terms with zero coefficient
@@ -622,8 +566,6 @@ def get_hamiltonian_expectation_value(
                               f"mismatches ansatz qubits {num_qubits}.")
 
         # --- Build & Run Measurement Circuit for this Term ---
-        # Start with a fresh copy of the parameter-bound ansatz
-        # Using copy() is essential to avoid modifying the original bound_ansatz
         qc_term = bound_ansatz.copy(name=f"Measure_{pauli_string}")
 
         # Apply basis transformation gates IN PLACE and get indices to measure
@@ -634,14 +576,11 @@ def get_hamiltonian_expectation_value(
         if not measured_qubit_indices:
              term_exp_val = 1.0
         else:
-             # Add a classical register *specifically sized* for the measured qubits
              num_measured = len(measured_qubit_indices)
              cr = ClassicalRegister(num_measured, name="c")
              qc_term.add_register(cr)
 
-             # Measure the selected qubits into the corresponding classical bits
-             # measured_qubit_indices = [q1, q2, ...] -> cr = [c0, c1, ...]
-             # Measure q1->c0, q2->c1, ...
+            # Add measurement instructions for the qubits that are not 'I'
              qc_term.measure(measured_qubit_indices, cr)
 
              # Run this specific measurement circuit
@@ -657,8 +596,6 @@ def get_hamiltonian_expectation_value(
     return total_expected_value
 
 
-# --- VQE Optimizer Function ---
-
 class OptimizationLogger:
     """Helper class to store optimization history during scipy.minimize."""
     def __init__(self):
@@ -670,10 +607,9 @@ class OptimizationLogger:
     def callback(self, current_params: np.ndarray, current_value: float, display_progress: bool = False, print_interval: int = 10):
         """Stores current parameters and value, optionally prints progress."""
         self.eval_count += 1
-        self.params_history.append(np.copy(current_params)) # Store a copy
+        self.params_history.append(np.copy(current_params)) 
         self.value_history.append(current_value)
 
-        # Print progress periodically if requested
         if display_progress and (self.eval_count - self._last_print_eval >= print_interval):
              print(f"  Eval: {self.eval_count:4d} | Energy: {current_value: .8f}")
              self._last_print_eval = self.eval_count
@@ -690,9 +626,9 @@ def find_ground_state(
     optimizer_method: str = 'COBYLA',
     optimizer_options: Optional[Dict[str, Any]] = None,
     initial_params_strategy: Union[str, np.ndarray, Sequence[float]] = 'random',
-    max_evaluations: Optional[int] = 150, # Used if maxiter/maxfev not in options
+    max_evaluations: Optional[int] = 150, 
     display_progress: bool = True,
-    plot_filename: Optional[str] = None # If set, saves convergence plot
+    plot_filename: Optional[str] = None 
 ) -> Dict[str, Any]:
     """
     Performs the Variational Quantum Eigensolver (VQE) algorithm to find the
@@ -744,17 +680,16 @@ def find_ground_state(
     print(f"Hamiltonian: {hamiltonian_expression}")
     print(f"Optimizer: {optimizer_method} | Shots per Eval: {n_shots}")
 
-    result_dict: Dict[str, Any] = { # Initialize result dict early
+    result_dict: Dict[str, Any] = { 
         'hamiltonian_expression': hamiltonian_expression,
         'optimizer_method': optimizer_method,
         'n_shots': n_shots,
         'plot_filename': plot_filename,
     }
 
-    # --- 1. Parse Hamiltonian & Determine Qubits ---
     try:
         parsed_hamiltonian = parse_hamiltonian_expression(hamiltonian_expression)
-        if not parsed_hamiltonian: # Should be caught by parser, but check again
+        if not parsed_hamiltonian: 
              print("[Error] Hamiltonian expression parsed successfully but resulted in zero terms.")
              return {'error': 'Hamiltonian parsing resulted in zero terms'}
         num_qubits = len(parsed_hamiltonian[0][1])
@@ -764,14 +699,12 @@ def find_ground_state(
         print(f"\n[Error] Failed to parse Hamiltonian: {e}")
         return {'error': 'Hamiltonian parsing failed', 'details': str(e)}
 
-    # --- 2. Create Ansatz ---
     try:
         ansatz, parameters = create_custom_ansatz(num_qubits, ansatz_structure)
         num_params = len(parameters)
         result_dict.update({'ansatz': ansatz, 'parameters': parameters})
         print(f"Created Ansatz: {num_params} parameters")
 
-        # Handle case of ansatz with no parameters
         if num_params == 0:
             warnings.warn("Ansatz has no parameters. Calculating fixed expectation value.", UserWarning)
             try:
@@ -793,10 +726,8 @@ def find_ground_state(
         # Include num_qubits if determined before failure
         return {'error': 'Ansatz creation failed', 'details': str(e), **result_dict}
 
-    # --- 3. Objective Function & Callback Setup ---
     logger = OptimizationLogger()
 
-    # Create the objective function closure
     def objective_function(current_params: np.ndarray) -> float:
         """Closure for the optimizer, calculates Hamiltonian expectation value."""
         try:
@@ -804,7 +735,7 @@ def find_ground_state(
             exp_val = get_hamiltonian_expectation_value(
                 ansatz=ansatz,
                 parsed_hamiltonian=parsed_hamiltonian,
-                param_values=current_params, # Pass the numpy array directly
+                param_values=current_params, 
                 n_shots=n_shots
             )
             # Log data and potentially print progress using the logger's callback
@@ -812,50 +743,44 @@ def find_ground_state(
             return exp_val
         except (ValueError, RuntimeError, TypeError) as e:
              # Handle potential errors during simulation gracefully within optimization
-             # Log the error? Re-raise? Return a penalty value?
              print(f"\n[Warning] Error during expectation value calculation (params={np.round(current_params[:4], 3)}...): {e}")
              # Returning infinity tells the optimizer this point is invalid/undesirable
              return np.inf
         except Exception as e:
-             # Catch unexpected errors
              print(f"\n[Critical Warning] Unexpected error in objective function: {e}")
              return np.inf
 
-    # --- 4. Initial Parameters ---
     initial_params: np.ndarray
     if isinstance(initial_params_strategy, np.ndarray):
         if initial_params_strategy.shape == (num_params,):
-            initial_params = initial_params_strategy.astype(float) # Ensure float type
+            initial_params = initial_params_strategy.astype(float) 
             print("Using provided numpy array for initial parameters.")
         else:
             print(f"[Warning] Provided initial_params shape {initial_params_strategy.shape} != expected ({num_params},). Using 'random'.")
-            initial_params_strategy = 'random' # Fallback to random
+            initial_params_strategy = 'random' 
             initial_params = np.random.uniform(0, 2 * np.pi, num_params)
-    # Allow list/tuple as input strategy
+
     elif isinstance(initial_params_strategy, (list, tuple, Sequence)):
          if len(initial_params_strategy) == num_params:
              initial_params = np.array(initial_params_strategy, dtype=float)
              print("Using provided list/sequence for initial parameters.")
          else:
             print(f"[Warning] Provided initial_params length {len(initial_params_strategy)} != expected {num_params}. Using 'random'.")
-            initial_params_strategy = 'random' # Fallback to random
+            initial_params_strategy = 'random'
             initial_params = np.random.uniform(0, 2 * np.pi, num_params)
     elif initial_params_strategy == 'zeros':
          initial_params = np.zeros(num_params)
          print("Using 'zeros' strategy for initial parameters.")
-    # Default to random if strategy is unknown or explicitly 'random'
     elif initial_params_strategy == 'random':
          initial_params = np.random.uniform(0, 2 * np.pi, num_params)
          print("Using 'random' strategy for initial parameters.")
-    else: # Fallback for unknown string
+    else: 
          print(f"[Warning] Unknown initial_params_strategy '{initial_params_strategy}'. Using 'random'.")
          initial_params = np.random.uniform(0, 2 * np.pi, num_params)
 
     result_dict['initial_params'] = np.copy(initial_params)
 
-    # --- 5. Run Optimization ---
     opt_options = optimizer_options if optimizer_options is not None else {}
-    # Set max evaluations from max_evaluations if not specified in options dict
     if 'maxiter' not in opt_options and 'maxfev' not in opt_options and max_evaluations is not None:
          if optimizer_method.upper() in ['COBYLA', 'NELDER-MEAD', 'POWELL']:
              opt_options['maxiter'] = int(max_evaluations) # These often use maxiter
@@ -863,24 +788,17 @@ def find_ground_state(
          elif optimizer_method.upper() in ['L-BFGS-B', 'SLSQP', 'TNC']:
               opt_options['maxfun'] = int(max_evaluations) # Others might use maxfun/maxfev
               print(f"Setting optimizer 'maxfun' to {opt_options['maxfun']}")
-         # Add more specific settings for other optimizers if needed
 
     print(f"\nStarting Optimization with {optimizer_method}...")
     print(f"Initial Parameters (first 5): {np.round(initial_params[:5], 5)}")
 
-    # Calculate initial energy using the objective function (also populates logger's first entry)
     initial_energy = objective_function(initial_params)
     if np.isinf(initial_energy):
         print("[Error] Objective function returned infinity for initial parameters. Cannot start optimization.")
         return {'error': 'Initial parameters yield invalid energy (inf).', 'details': 'Check ansatz or Hamiltonian.', **result_dict}
     print(f"Initial Energy: {initial_energy:.8f}")
 
-    # Reset logger evaluation count if objective was called outside minimize loop
-    # (Scipy might call objective multiple times initially depending on method)
-    # It's safer to just rely on the logger's internal count.
-
     try:
-        # Callback is handled internally by the objective_function logging call
         result = minimize(objective_function,
                           initial_params,
                           method=optimizer_method,
@@ -888,7 +806,7 @@ def find_ground_state(
 
     except Exception as e:
         print(f"\n[Error] Optimization process failed: {e}")
-        # Return partial results collected by the logger
+
         cost_history, param_history = logger.get_history()
         result_dict.update({
             'error': 'Optimization process failed', 'details': str(e),
@@ -898,9 +816,8 @@ def find_ground_state(
         })
         return result_dict
 
-    # --- 6. Process and Display Results ---
     print("\n" + "-"*20 + " Optimization Finished " + "-"*20)
-    cost_history, param_history = logger.get_history() # Get full history
+    cost_history, param_history = logger.get_history() 
     result_dict.update({
         'optimal_params': result.x,
         'optimal_value': result.fun,
@@ -916,9 +833,8 @@ def find_ground_state(
     else:
         print(f"[Warning] Optimizer terminated unsuccessfully: {result.message}")
 
-    # Use nfev (number of function evaluations) as it's generally available
     if hasattr(result, 'nfev'): print(f"Function Evaluations: {result.nfev}")
-    if hasattr(result, 'nit'): print(f"Iterations: {result.nit}") # Not always present/meaningful
+    if hasattr(result, 'nit'): print(f"Iterations: {result.nit}") 
 
     print(f"Optimal Energy Found: {result_dict['optimal_value']:.10f}")
     opt_params = result_dict['optimal_params']
@@ -930,10 +846,9 @@ def find_ground_state(
          print(f"  Last 5:  {np.round(opt_params[-5:], 5)}")
     print("-" * 50)
 
-    # --- 7. Plotting ---
-    if plot_filename and cost_history: # Check if filename is given and history exists
+    if plot_filename and cost_history:
         try:
-            fig, ax = plt.subplots(figsize=(10, 6)) # Use object-oriented interface
+            fig, ax = plt.subplots(figsize=(10, 6)) 
             ax.plot(range(len(cost_history)), cost_history, marker='.', linestyle='-', markersize=4)
             ax.set_xlabel("Optimization Evaluation Step")
             ax.set_ylabel("Hamiltonian Expectation Value (Energy)")
@@ -941,13 +856,11 @@ def find_ground_state(
             ax.grid(True, linestyle='--', alpha=0.6)
             fig.tight_layout()
             fig.savefig(plot_filename) # Save the plot to the specified file
-            plt.close(fig) # Close the plot figure explicitly
+            plt.close(fig) 
             print(f"Convergence plot saved to '{plot_filename}'")
             result_dict['plot_filename'] = plot_filename # Confirm saved filename
         except Exception as e:
             print(f"[Warning] Could not save convergence plot to '{plot_filename}': {e}")
-            # Ensure plot_filename is None in results if saving failed
             result_dict['plot_filename'] = None
 
-    # --- 8. Return Comprehensive Results Dictionary ---
     return result_dict
