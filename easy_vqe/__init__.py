@@ -6,11 +6,10 @@ A simple interface for running Variational Quantum Eigensolver (VQE)
 simulations using Qiskit, focusing on ease of use for defining Hamiltonians
 and ansatz structures.
 """
+from easy_vqe import *
 
-from .vqe_core import find_ground_state
-from .vqe_core import create_custom_ansatz, parse_hamiltonian_expression
 
-__version__ = "0.1.0" 
+__version__ = "0.2.0" 
 
 __all__ = [
     'find_ground_state',
