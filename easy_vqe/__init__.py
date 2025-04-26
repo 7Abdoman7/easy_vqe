@@ -14,7 +14,7 @@ from .vqe_core import get_theoretical_ground_state_energy, parse_hamiltonian_exp
 from .vqe_core import create_custom_ansatz
 
 
-__version__ = "0.2.3"
+__version__ = "1.0.0"
 
 
 __all__ = [

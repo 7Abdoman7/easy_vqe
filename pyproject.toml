@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "easy_vqe"
-version = "0.2.3" 
+version = "1.0.0" 
 authors = [
   { name="Abdelrahman Elsayed Ahmed", email="abdo.elsayd102@gmail.com" },
 ]
