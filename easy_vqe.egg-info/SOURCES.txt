@@ -1,6 +1,11 @@
 LICENSE
+README.md
 pyproject.toml
 easy_vqe/__init__.py
+easy_vqe/circuit.py
+easy_vqe/hamiltonian.py
+easy_vqe/measurement.py
+easy_vqe/visualization.py
 easy_vqe/vqe_core.py
 easy_vqe.egg-info/PKG-INFO
 easy_vqe.egg-info/SOURCES.txt

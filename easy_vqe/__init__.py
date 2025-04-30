@@ -1,31 +1,34 @@
 """
-Easy VQE Package
-----------------
+Easy VQE: A simplified implementation of the Variational Quantum Eigensolver algorithm.
 
-A simple interface for running Variational Quantum Eigensolver (VQE)
-simulations using Qiskit, focusing on ease of use for defining Hamiltonians
-and ansatz structures.
+This package provides tools for quantum chemistry simulations using VQE algorithm.
 """
 
-from .vqe_core import find_ground_state
-from .vqe_core import draw_final_bound_circuit
-from .vqe_core import print_results_summary
-from .vqe_core import get_theoretical_ground_state_energy, parse_hamiltonian_expression
-from .vqe_core import create_custom_ansatz
+__version__ = "1.1.0"
 
-
-__version__ = "1.0.0"
-
+# Public API exports
+from .hamiltonian import parse_hamiltonian_expression, get_theoretical_ground_state_energy
+from .circuit import create_custom_ansatz
+from .measurement import (
+    apply_measurement_basis,
+    run_circuit_and_get_counts,
+    calculate_term_expectation, 
+    get_hamiltonian_expectation_value
+)
+from .vqe_core import find_ground_state, OptimizationLogger
+from .visualization import print_results_summary, draw_final_bound_circuit
 
 __all__ = [
-    'find_ground_state',
-    'create_custom_ansatz',
     'parse_hamiltonian_expression',
-    'draw_final_bound_circuit',
-    'print_results_summary',
     'get_theoretical_ground_state_energy',
-    '__version__'
+    'create_custom_ansatz',
+    'apply_measurement_basis',
+    'run_circuit_and_get_counts',
+    'calculate_term_expectation',
+    'get_hamiltonian_expectation_value',
+    'find_ground_state',
+    'OptimizationLogger',
+    'print_results_summary',
+    'draw_final_bound_circuit',
+    '_version_',
 ]
-
-import logging
-logging.getLogger(__name__).addHandler(logging.NullHandler()) 

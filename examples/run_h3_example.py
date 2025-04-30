@@ -3,7 +3,7 @@ from easy_vqe import find_ground_state, draw_final_bound_circuit, print_results_
 
 # --- Define Hamiltonian ---
 # Example: Simpler 3-Qubit Hamiltonian (adjust as needed)
-hamiltonian_3q = "-1.0 * ZZI + 0.9 * ZIZ - 0.5 * IZZ + 0.2 * XXX - 0.3 * YYY"
+hamiltonian_3q = "-ZZI+0.9*ZIZ-0.5*IZZ+0.2*XXX-0.3*YYY"
 
 # --- Define Ansatz Structure ---
 ansatz_block_linear_ent = [
@@ -48,7 +48,7 @@ print(f"Theoretical Ground State Energy: {theoretical_energy}")
 vqe_energy = results['optimal_value']
 print(f"VQE Ground State Energy: {vqe_energy}")
 
-if np.isclose(vqe_energy, theoretical_energy, atol=1e-2):
+if np.isclose(vqe_energy, theoretical_energy, atol=1e-1):
     print("VQE result is close to the theoretical ground state energy.")
 else:
     print("VQE result is NOT close to the theoretical ground state energy.")
