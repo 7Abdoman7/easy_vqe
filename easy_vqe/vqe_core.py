@@ -9,6 +9,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import warnings
+import re
 from scipy.optimize import minimize
 from typing import List, Tuple, Union, Dict, Optional, Any, Sequence
 
@@ -27,11 +28,15 @@ class OptimizationLogger:
     def callback(self, current_params: np.ndarray, current_value: float, display_progress: bool = False, print_interval: int = 10):
         """Stores current parameters and value, optionally prints progress."""
         self.eval_count += 1
-        self.params_history.append(np.copy(current_params)) 
+        self.params_history.append(np.copy(current_params))
         self.value_history.append(current_value)
 
         if display_progress and (self.eval_count - self._last_print_eval >= print_interval):
-             print(f"  Eval: {self.eval_count:4d} | Energy: {current_value: .8f}")
+             # Only print if the value is finite
+             if np.isfinite(current_value):
+                 print(f"  Eval: {self.eval_count:4d} | Energy: {current_value: .8f}")
+             else:
+                 print(f"  Eval: {self.eval_count:4d} | Energy: {current_value}") # Print inf/nan directly
              self._last_print_eval = self.eval_count
 
     def get_history(self) -> Tuple[List[float], List[np.ndarray]]:
@@ -46,9 +51,9 @@ def find_ground_state(
     optimizer_method: str = 'COBYLA',
     optimizer_options: Optional[Dict[str, Any]] = None,
     initial_params_strategy: Union[str, np.ndarray, Sequence[float]] = 'random',
-    max_evaluations: Optional[int] = 150, 
+    max_evaluations: Optional[int] = 150,
     display_progress: bool = True,
-    plot_filename: Optional[str] = None 
+    plot_filename: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Performs the Variational Quantum Eigensolver (VQE) algorithm to find the
@@ -100,24 +105,38 @@ def find_ground_state(
     print(f"Hamiltonian: {hamiltonian_expression}")
     print(f"Optimizer: {optimizer_method} | Shots per Eval: {n_shots}")
 
-    result_dict: Dict[str, Any] = { 
+    result_dict: Dict[str, Any] = {
         'hamiltonian_expression': hamiltonian_expression,
         'optimizer_method': optimizer_method,
         'n_shots': n_shots,
-        'plot_filename': plot_filename,
+        'plot_filename': plot_filename, # Store requested filename
+        'optimal_params': None,
+        'optimal_value': None,
+        'num_qubits': None,
+        'ansatz': None,
+        'parameters': [],
+        'optimization_result': None,
+        'cost_history': [],
+        'parameter_history': [],
+        'success': False,
+        'message': 'Initialization',
+        'initial_params': None,
+        'initial_params_strategy_used': None,
     }
 
     try:
         parsed_hamiltonian = parse_hamiltonian_expression(hamiltonian_expression)
-        if not parsed_hamiltonian: 
+        if not parsed_hamiltonian:
              print("[Error] Hamiltonian expression parsed successfully but resulted in zero terms.")
-             return {'error': 'Hamiltonian parsing resulted in zero terms'}
+             result_dict.update({'error': 'Hamiltonian parsing resulted in zero terms'})
+             return result_dict
         num_qubits = len(parsed_hamiltonian[0][1])
         result_dict['num_qubits'] = num_qubits
         print(f"Parsed Hamiltonian: {len(parsed_hamiltonian)} terms | Qubits: {num_qubits}")
-    except (ValueError, TypeError) as e:
-        print(f"\n[Error] Failed to parse Hamiltonian: {e}")
-        return {'error': 'Hamiltonian parsing failed', 'details': str(e)}
+    except Exception as e:
+        print(f"\n[Error] Failed during Hamiltonian parsing or validation: {e}")
+        result_dict.update({'error': 'Hamiltonian processing failed', 'details': str(e)})
+        return result_dict # Exit early
 
     try:
         ansatz, parameters = create_custom_ansatz(num_qubits, ansatz_structure)
@@ -128,7 +147,8 @@ def find_ground_state(
         if num_params == 0:
             warnings.warn("Ansatz has no parameters. Calculating fixed expectation value.", UserWarning)
             try:
-                fixed_value = get_hamiltonian_expectation_value(ansatz, parsed_hamiltonian, [], n_shots)
+                # Use None for param_values when no parameters exist
+                fixed_value = get_hamiltonian_expectation_value(ansatz, parsed_hamiltonian, None, n_shots)
                 print(f"Fixed Expectation Value: {fixed_value:.8f}")
                 result_dict.update({
                     'optimal_params': np.array([]), 'optimal_value': fixed_value,
@@ -139,17 +159,19 @@ def find_ground_state(
                 return result_dict
             except Exception as e:
                 print(f"\n[Error] Failed to calculate fixed expectation value: {e}")
-                return {'error': 'Failed static evaluation', 'details': str(e), **result_dict}
+                result_dict.update({'error': 'Failed static evaluation', 'details': str(e)})
+                return result_dict
 
-    except (ValueError, TypeError, RuntimeError, IndexError) as e:
-        print(f"\n[Error] Failed to create Ansatz: {e}")
-        # Include num_qubits if determined before failure
-        return {'error': 'Ansatz creation failed', 'details': str(e), **result_dict}
+    except Exception as e:
+        print(f"\n[Error] Failed during Ansatz creation: {e}")
+        result_dict.update({'error': 'Ansatz creation failed', 'details': str(e)})
+        return result_dict # Exit early
 
     logger = OptimizationLogger()
 
     def objective_function(current_params: np.ndarray) -> float:
         """Closure for the optimizer, calculates Hamiltonian expectation value."""
+        value = np.inf # Default to infinity
         try:
             exp_val = get_hamiltonian_expectation_value(
                 ansatz=ansatz,
@@ -157,77 +179,106 @@ def find_ground_state(
                 param_values=current_params,
                 n_shots=n_shots
             )
-            logger.callback(current_params, exp_val, display_progress=display_progress)
-            return exp_val
+            value = exp_val
         except (ValueError, RuntimeError, TypeError) as e:
              print(f"\n[Warning] Error during expectation value calculation (params={np.round(current_params[:4], 3)}...): {e}")
-             return np.inf
+             # value remains inf
         except Exception as e:
              print(f"\n[Critical Warning] Unexpected error in objective function: {e}")
-             return np.inf
+             # value remains inf
+        finally:
+             # Log the attempt regardless of success, potentially with inf value
+             logger.callback(current_params, value, display_progress=display_progress)
+             return value # Return the calculated value or inf
 
     initial_params: np.ndarray
-    strategy_check_value = initial_params_strategy
+    strategy_name_used: str # Variable to store the name
 
-    print("\nProcessing Initial Parameters Strategy...") 
+    print("\nProcessing Initial Parameters Strategy...")
+    current_strategy = initial_params_strategy
 
-    if isinstance(strategy_check_value, np.ndarray):
-        if strategy_check_value.shape == (num_params,):
-            initial_params = strategy_check_value.astype(float)
-            print(f"Strategy: Using provided numpy array (shape {initial_params.shape}) for initial parameters.")
+    if isinstance(current_strategy, np.ndarray):
+        if current_strategy.shape == (num_params,):
+            try:
+                initial_params = current_strategy.astype(float)
+                strategy_name_used = 'provided_array'
+                print(f"Strategy: Using provided numpy array (shape {initial_params.shape}) for initial parameters.")
+            except ValueError as ve:
+                print(f"[Warning] Could not convert provided numpy array elements to float: {ve}. Defaulting to 'random'.")
+                initial_params = np.random.uniform(0, 2 * np.pi, num_params)
+                strategy_name_used = 'random'
+                print(f"Strategy: Using 'random' (generated {num_params} parameters).")
         else:
-            print(f"[Warning] Provided initial_params numpy array shape {strategy_check_value.shape} != expected ({num_params},). Defaulting to 'random'.")
+            print(f"[Warning] Provided initial_params numpy array shape {current_strategy.shape} != expected ({num_params},). Defaulting to 'random'.")
             initial_params = np.random.uniform(0, 2 * np.pi, num_params)
+            strategy_name_used = 'random'
             print(f"Strategy: Using 'random' (generated {num_params} parameters).")
-            strategy_check_value = 'random' 
 
-    elif isinstance(strategy_check_value, (list, tuple)):
-         if len(strategy_check_value) == num_params:
+    elif isinstance(current_strategy, (list, tuple)):
+         if len(current_strategy) == num_params:
              try:
-                 initial_params = np.array(strategy_check_value, dtype=float)
-                 print(f"Strategy: Using provided list/tuple (length {len(strategy_check_value)}) for initial parameters.")
+                 initial_params = np.array(current_strategy, dtype=float)
+                 strategy_name_used = 'provided_list_tuple'
+                 print(f"Strategy: Using provided list/tuple (length {len(current_strategy)}) for initial parameters.")
              except ValueError as ve:
                  print(f"[Warning] Could not convert provided list/tuple to numeric array: {ve}. Defaulting to 'random'.")
                  initial_params = np.random.uniform(0, 2 * np.pi, num_params)
+                 strategy_name_used = 'random'
                  print(f"Strategy: Using 'random' (generated {num_params} parameters).")
-                 strategy_check_value = 'random'
          else:
-            print(f"[Warning] Provided initial_params list/tuple length {len(strategy_check_value)} != expected {num_params}. Defaulting to 'random'.")
+            print(f"[Warning] Provided initial_params list/tuple length {len(current_strategy)} != expected {num_params}. Defaulting to 'random'.")
             initial_params = np.random.uniform(0, 2 * np.pi, num_params)
+            strategy_name_used = 'random'
             print(f"Strategy: Using 'random' (generated {num_params} parameters).")
-            strategy_check_value = 'random'
 
-    elif strategy_check_value == 'zeros':
+    elif isinstance(current_strategy, str) and current_strategy == 'zeros':
          initial_params = np.zeros(num_params)
+         strategy_name_used = 'zeros'
          print(f"Strategy: Using 'zeros' (generated {num_params} parameters).")
-    elif strategy_check_value == 'random':
+    elif isinstance(current_strategy, str) and current_strategy == 'random':
          initial_params = np.random.uniform(0, 2 * np.pi, num_params)
+         strategy_name_used = 'random'
          print(f"Strategy: Using 'random' (generated {num_params} parameters).")
     else:
-         print(f"[Warning] Unknown initial_params_strategy '{strategy_check_value}'. Defaulting to 'random'.")
+         print(f"[Warning] Unknown or invalid initial_params_strategy '{current_strategy}'. Defaulting to 'random'.")
          initial_params = np.random.uniform(0, 2 * np.pi, num_params)
+         strategy_name_used = 'random'
          print(f"Strategy: Using 'random' (generated {num_params} parameters).")
-         strategy_check_value = 'random'
 
     result_dict['initial_params'] = np.copy(initial_params)
-    result_dict['initial_params_strategy_used'] = strategy_check_value 
+    result_dict['initial_params_strategy_used'] = strategy_name_used
 
     opt_options = optimizer_options if optimizer_options is not None else {}
-    if 'maxiter' not in opt_options and 'maxfev' not in opt_options and max_evaluations is not None:
-         if optimizer_method.upper() in ['COBYLA', 'NELDER-MEAD', 'POWELL']:
-             opt_options['maxiter'] = int(max_evaluations) # These often use maxiter
-             print(f"Setting optimizer 'maxiter' to {opt_options['maxiter']}")
-         elif optimizer_method.upper() in ['L-BFGS-B', 'SLSQP', 'TNC']:
-              opt_options['maxfun'] = int(max_evaluations) # Others might use maxfun/maxfev
-              print(f"Setting optimizer 'maxfun' to {opt_options['maxfun']}")
+    if max_evaluations is not None:
+         max_eval_int = int(max_evaluations)
+         # Set default based on common SciPy usage if not explicitly provided
+         if optimizer_method.upper() in ['COBYLA', 'NELDER-MEAD', 'POWELL', 'SLSQP'] and 'maxiter' not in opt_options:
+             opt_options['maxiter'] = max_eval_int
+             print(f"Setting optimizer 'maxiter' to {opt_options['maxiter']} based on max_evaluations.")
+         elif optimizer_method.upper() in ['L-BFGS-B', 'TNC'] and 'maxfun' not in opt_options:
+              opt_options['maxfun'] = max_eval_int
+              print(f"Setting optimizer 'maxfun' to {opt_options['maxfun']} based on max_evaluations.")
+         elif 'maxiter' not in opt_options and 'maxfev' not in opt_options and 'maxfun' not in opt_options:
+             # Generic fallback if optimizer type isn't specifically known
+             opt_options['maxiter'] = max_eval_int # Default to maxiter
+             print(f"Setting optimizer 'maxiter' to {opt_options['maxiter']} as a default based on max_evaluations.")
+
 
     print(f"\nStarting Optimization with {optimizer_method}...")
     print(f"Initial Parameters (first 5): {np.round(initial_params[:5], 5)}")
 
-    initial_energy = objective_function(initial_params)
-    if np.isinf(initial_energy):
-        print("[Error] Objective function returned infinity for initial parameters. Cannot start optimization.")
-        return {'error': 'Initial parameters yield invalid energy (inf).', 'details': 'Check ansatz or Hamiltonian.', **result_dict}
+    initial_energy = objective_function(initial_params) # This also logs the first point
+    if not np.isfinite(initial_energy): # Check for inf or nan
+        print("[Error] Objective function returned non-finite value for initial parameters. Cannot start optimization.")
+        result_dict.update({
+            'error': 'Initial parameters yield invalid energy (inf/nan).',
+            'details': 'Check ansatz or Hamiltonian.',
+            'optimal_value': initial_energy, # Store the non-finite value
+            'cost_history': logger.value_history, # Store history up to this point
+            'parameter_history': logger.params_history
+        })
+        return result_dict # Exit early
+
     print(f"Initial Energy: {initial_energy:.8f}")
 
     try:
@@ -237,19 +288,21 @@ def find_ground_state(
                           options=opt_options)
 
     except Exception as e:
-        print(f"\n[Error] Optimization process failed: {e}")
-
+        print(f"\n[Error] Optimization process failed unexpectedly: {e}")
         cost_history, param_history = logger.get_history()
         result_dict.update({
             'error': 'Optimization process failed', 'details': str(e),
-            'cost_history': cost_history, 'parameter_history': param_history,
-            'optimization_result': None, 'success': False,
+            'cost_history': cost_history, # Log history up to failure
+            'parameter_history': param_history,
+            'optimization_result': None, # No result object from minimize
+            'success': False, # Mark as unsuccessful
             'message': f'Optimization terminated due to error: {e}'
         })
-        return result_dict
+        return result_dict # Exit here
+
 
     print("\n" + "-"*20 + " Optimization Finished " + "-"*20)
-    cost_history, param_history = logger.get_history() 
+    cost_history, param_history = logger.get_history()
     result_dict.update({
         'optimal_params': result.x,
         'optimal_value': result.fun,
@@ -265,34 +318,55 @@ def find_ground_state(
     else:
         print(f"[Warning] Optimizer terminated unsuccessfully: {result.message}")
 
-    if hasattr(result, 'nfev'): print(f"Function Evaluations: {result.nfev}")
-    if hasattr(result, 'nit'): print(f"Iterations: {result.nit}") 
+    # Use logger count as fallback if nfev not present
+    eval_count_display = getattr(result, 'nfev', logger.eval_count)
+    print(f"Function Evaluations: {eval_count_display}")
+    if hasattr(result, 'nit'): print(f"Iterations: {result.nit}")
 
-    print(f"Optimal Energy Found: {result_dict['optimal_value']:.10f}")
-    opt_params = result_dict['optimal_params']
-    if len(opt_params) < 15:
-         print(f"Optimal Parameters:\n{np.round(opt_params, 5)}")
+    # Only print optimal energy if it's finite
+    if np.isfinite(result_dict['optimal_value']):
+        print(f"Optimal Energy Found: {result_dict['optimal_value']:.10f}")
     else:
-         print(f"Optimal Parameters: (Array length {len(opt_params)})")
-         print(f"  First 5: {np.round(opt_params[:5], 5)}")
-         print(f"  Last 5:  {np.round(opt_params[-5:], 5)}")
+        print(f"Final Value Found: {result_dict['optimal_value']}") # Print inf/nan directly
+
+    opt_params = result_dict['optimal_params']
+    if opt_params is not None:
+        if len(opt_params) < 15:
+             print(f"Optimal Parameters:\n{np.round(opt_params, 5)}")
+        else:
+             print(f"Optimal Parameters: (Array length {len(opt_params)})")
+             print(f"  First 5: {np.round(opt_params[:5], 5)}")
+             print(f"  Last 5:  {np.round(opt_params[-5:], 5)}")
+    else:
+        print("Optimal Parameters: Not available.")
     print("-" * 50)
 
-    if plot_filename and cost_history:
+    if plot_filename and result_dict['cost_history']:
         try:
-            fig, ax = plt.subplots(figsize=(10, 6)) 
-            ax.plot(range(len(cost_history)), cost_history, marker='.', linestyle='-', markersize=4)
+            fig, ax = plt.subplots(figsize=(10, 6))
+            valid_history = [(i,e) for i, e in enumerate(result_dict['cost_history']) if np.isfinite(e)]
+            if valid_history:
+                 steps, energies = zip(*valid_history)
+                 ax.plot(steps, energies, marker='.', linestyle='-', markersize=4)
+                 ax.set_ylabel("Hamiltonian Expectation Value (Energy)")
+            else:
+                 ax.text(0.5, 0.5, 'No finite energy values recorded', ha='center', va='center')
+                 ax.set_ylabel("Value") # Generic label if no energy
+
             ax.set_xlabel("Optimization Evaluation Step")
-            ax.set_ylabel("Hamiltonian Expectation Value (Energy)")
             ax.set_title(f"VQE Convergence ({optimizer_method}, {n_shots} shots)")
             ax.grid(True, linestyle='--', alpha=0.6)
             fig.tight_layout()
-            fig.savefig(plot_filename) # Save the plot to the specified file
-            plt.close(fig) 
+            fig.savefig(plot_filename)
+            plt.close(fig)
             print(f"Convergence plot saved to '{plot_filename}'")
             result_dict['plot_filename'] = plot_filename # Confirm saved filename
         except Exception as e:
             print(f"[Warning] Could not save convergence plot to '{plot_filename}': {e}")
-            result_dict['plot_filename'] = None
+            result_dict['plot_filename'] = None # Indicate failure
+    elif plot_filename and not result_dict['cost_history']:
+         print(f"[Info] Plotting skipped: No cost history recorded.")
+         result_dict['plot_filename'] = None
+
 
     return result_dict
