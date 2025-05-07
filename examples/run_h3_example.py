@@ -6,19 +6,25 @@ from easy_vqe import find_ground_state, draw_final_bound_circuit, print_results_
 hamiltonian_3q = "-ZZI+0.9*ZIZ-0.5*IZZ+0.2*XXX-0.3*YYY"
 
 # --- Define Ansatz Structure ---
-ansatz_block_linear_ent = [
-    ('ry', [0, 1, 2]),
-    ('cx', [0, 1]),
-    ('cx', [1, 2]), 
-    ('rz', [0, 1, 2]),
+ansatz_block = [
+    "ry_layer",
+    "linear_entanglement",
+    "rz_layer",
+    "barrier",
 ]
 
 ansatz_structure = [
-    ansatz_block_linear_ent,
-    ("barrier", []),  
-    ansatz_block_linear_ent, 
+    ansatz_block,
+    ansatz_block,
 ]
 
+# --- Define Initial Parameters ---
+n_shots = 8192
+optimizer_method = 'COBYLA'
+optimizer_options = {'maxiter': 250, 'rhobeg': 0.5, 'tol': 1e-5}
+display_progress = True
+plot_filename = "h3_convergence.png"
+initial_params_strategy = 'zeros'  
 
 # --- Run VQE ---
 print("Starting VQE calculation...")
@@ -26,12 +32,12 @@ print("Starting VQE calculation...")
 results = find_ground_state(
     ansatz_structure=ansatz_structure,
     hamiltonian_expression=hamiltonian_3q,
-    n_shots=8192,
-    optimizer_method='COBYLA',
-    optimizer_options={'maxiter': 500, 'rhobeg': 0.5, 'tol': 1e-5}, 
-    initial_params_strategy='random',
-    display_progress=True,
-    plot_filename="h3_convergence.png" 
+    n_shots=n_shots,
+    optimizer_method=optimizer_method,
+    optimizer_options=optimizer_options, 
+    initial_params_strategy=initial_params_strategy,
+    display_progress=display_progress,
+    plot_filename=plot_filename
 )
 
 # --- Print Summary from Results Dictionary ---

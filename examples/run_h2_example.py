@@ -7,14 +7,15 @@ hamiltonian_2q = "2*II-2*XX+3*YY-3*ZZ"
 
 ansatz_block = [
     "ry_layer",
-    ('cx', [0, 1]),
-    "ry_layer"
+    "linear_entanglement",
+    "rz_layer",
+    "barrier" 
 ]
 
 ansatz_structure = [
     ansatz_block,
-    ("barrier", []),  
     ansatz_block, 
+    ansatz_block,
 ]
 
 # --- Define Initial Parameters ---

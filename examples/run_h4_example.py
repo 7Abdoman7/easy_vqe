@@ -23,23 +23,25 @@ hamiltonian_4q = """\
 
 # --- Define Ansatz Structure ---
 ansatz_block = [
-    ('ry', list(range(4))),  # Apply ry to all qubits
-    ('rz', list(range(4))),  # Apply rz to all qubits
-    ('ry', list(range(4))),  # Apply ry to all qubits
-    ('cx', [0, 1]),
-    ('cx', [1, 2]),
-    ('cx', [2, 3]),
-    ('ry', list(range(4))),  # Apply ry to all qubits
-    ('rz', list(range(4))),  # Apply rz to all qubits
-    ('ry', list(range(4))),  # Apply ry to all qubits
-    ('cx', [0, 1]),
-    ('cx', [1, 2]),
-    ('cx', [2, 3]),
+    "ry_layer",
+    "rz_layer",
+    "full_entanglement",
+    "barrier",
 ]
+
 ansatz_structure = [
     ansatz_block,
-    ansatz_block
+    ansatz_block,
+    ansatz_block,
 ]
+
+# --- Define Initial Parameters ---
+n_shots = 8192
+optimizer_method = 'COBYLA'
+optimizer_options = {'maxiter': 250, 'rhobeg': 0.5, 'tol': 1e-5}
+display_progress = True
+plot_filename = "h4_convergence.png"
+initial_params_strategy = 'zeros'  
 
 # --- Run VQE ---
 print("Starting VQE calculation...")
@@ -47,12 +49,12 @@ print("Starting VQE calculation...")
 results = find_ground_state(
     ansatz_structure=ansatz_structure,
     hamiltonian_expression=hamiltonian_4q,
-    n_shots=8192,
-    optimizer_method='COBYLA',
-    optimizer_options={'maxiter': 500, 'rhobeg': 0.5, 'tol': 1e-5},
-    initial_params_strategy='random',
-    display_progress=True,
-    plot_filename="h4_convergence.png",
+    n_shots=n_shots,
+    optimizer_method=optimizer_method,
+    optimizer_options=optimizer_options, 
+    initial_params_strategy=initial_params_strategy,
+    display_progress=display_progress,
+    plot_filename=plot_filename
 )
 
 # --- Print Summary from Results Dictionary ---
@@ -66,7 +68,7 @@ theoretical_energy = get_theoretical_ground_state_energy(hamiltonian_4q)
 print(f"Theoretical Ground State Energy: {theoretical_energy}")
 
 # --- Compare with VQE Result ---
-vqe_energy = results['final_energy']
+vqe_energy = results['optimal_value']
 print(f"VQE Ground State Energy: {vqe_energy}")
 
 if np.isclose(vqe_energy, theoretical_energy, atol=1e-2):
