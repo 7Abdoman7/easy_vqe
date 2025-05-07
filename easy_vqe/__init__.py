@@ -4,7 +4,7 @@ Easy VQE: A simplified implementation of the Variational Quantum Eigensolver alg
 This package provides tools for quantum chemistry simulations using VQE algorithm.
 """
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 # Public API exports
 from .hamiltonian import parse_hamiltonian_expression, get_theoretical_ground_state_energy
