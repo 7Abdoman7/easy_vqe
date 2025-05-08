@@ -44,7 +44,7 @@ results = find_ground_state(
 print_results_summary(results)
 
 # --- Draw Final Bound Circuit ---
-draw_final_bound_circuit(results)
+draw_final_bound_circuit(results, draw_type='mpl', circuit_name="ansatz_3q")
 
 # --- Theoretical Ground State Energy ---
 theoretical_energy = get_theoretical_ground_state_energy(hamiltonian_3q)
